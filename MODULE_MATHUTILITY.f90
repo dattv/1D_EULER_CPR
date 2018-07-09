@@ -1,0 +1,276 @@
+MODULE MODULE_MATHUTILITY
+    USE MODULE_PRECISION
+    
+    
+    CONTAINS
+
+    FUNCTION JACOBIGL(ALPHA, BETA, N)
+      REAL(WP), INTENT(IN) :: ALPHA, BETA
+      INTEGER(IP), INTENT(IN) :: N
+      REAL(WP), DIMENSION(N+1) :: JACOBIGL
+
+      REAL(WP), DIMENSION(N-1) :: W
+
+      IF ( N<=0 ) THEN
+        PRINT*,'JACOBIGL CALLED WITH N<=0. ABORTING'
+        STOP
+      END IF
+      JACOBIGL = 0.0_WP
+      IF ( N==1 ) THEN
+        JACOBIGL(1) = -1.0_WP
+        JACOBIGL(2) = 1.0_WP
+        RETURN
+      END IF
+
+      CALL JACOBIGQ ( ALPHA+1.0_WP, BETA+1.0_WP, N-2, JACOBIGL(2:N), W )
+      JACOBIGL(1) = -1.0_WP
+      JACOBIGL(N+1) = 1.0_WP
+      RETURN
+    END FUNCTION JACOBIGL
+    
+    
+
+    SUBROUTINE JACOBIGQ(ALPHA, BETA, N, X, W)
+      REAL(WP), INTENT(IN) :: ALPHA, BETA
+      INTEGER(IP), INTENT(IN) :: N
+      REAL(WP), DIMENSION(N+1), INTENT(OUT) :: X, W
+
+      REAL(WP), DIMENSION(1:N+1) :: H1, JDIAG1, IREAL
+      REAL(WP), DIMENSION(1:N) :: JDIAG2, D1, D2, D3
+      REAL(WP), DIMENSION(MAX(1,2*N)) :: WORK
+      REAL(WP), DIMENSION(1:N+1,1:N+1) :: VECT
+      REAL(WP) :: LNGAMMAAB, LNGAMMAA, LNGAMMAB
+      INTEGER(IP) :: INFO, I
+
+      IF (N==0) THEN
+        X(1) = ( ALPHA - BETA ) / ( ALPHA + BETA + 2.0_WP )
+        W(1) = 2.0_WP
+        RETURN
+      END IF
+
+      FORALL(I=0:N) IREAL(I+1) = REAL(I,WP)
+      H1 = 2.0_WP*IREAL+ALPHA+BETA
+      WHERE (H1>0.0_WP)
+        JDIAG1 = -(ALPHA**2-BETA**2)/(H1*(H1+2.0_WP))
+      ELSEWHERE
+        JDIAG1 = 0.0_WP
+      END WHERE
+      D1 = 2.0_WP/(H1(1:N)+2.0_WP)
+      D2 = IREAL(2:N+1)*(IREAL(2:N+1)+ALPHA+BETA)* &
+                        (IREAL(2:N+1)+ALPHA)*(IREAL(2:N+1)+BETA)
+      D3 = 1.0_WP/((H1(1:N)+1)*(H1(1:N)+3))
+      JDIAG2 = D1*SQRT(D2*D3)
+      IF (WP == DP .OR. WP == SP) THEN
+          
+        CALL DSTEQR('I', N+1, JDIAG1, JDIAG2, VECT, N+1, WORK, INFO )
+      ELSE IF (WP == QP ) THEN
+        !CALL QSTEQR('I', N+1, JDIAG1, JDIAG2, VECT, N+1, WORK, INFO )
+      END IF
+      IF (INFO <0) THEN
+        PRINT*,'PARAMETER ', I, ' IN CALL TO DSTEQR HAS ILLEGAL VALUE'
+        STOP
+      END IF
+      IF (INFO >0) THEN
+        PRINT*, I, ' OFF-DIAGONAL ELEMENTS HAVE NOT CONVERGED TO ZERO IN CALL TO DSTEQR'
+        STOP
+      END IF
+      X = JDIAG1
+      LNGAMMAAB = LOG_GAMMA(ALPHA+BETA+1.0_WP)
+      LNGAMMAA  = LOG_GAMMA(ALPHA+1.0_WP)
+      LNGAMMAB  = LOG_GAMMA(BETA+1.0_WP)
+      W = VECT(1,:)**2*2.0_WP**(ALPHA+BETA+1)/(ALPHA+BETA+1)* &
+                       EXP(LNGAMMAA+LNGAMMAB-LNGAMMAAB)
+      RETURN
+    END SUBROUTINE JACOBIGQ    
+    
+   FUNCTION VANDERMONDE1D ( N, X )
+      INTEGER(IP), INTENT(IN) :: N
+      REAL(WP), DIMENSION(:), INTENT(IN) :: X
+      REAL(WP), DIMENSION(SIZE(X),N+1) :: VANDERMONDE1D
+
+      INTEGER :: J
+
+!      FORALL(J=1:N+1) VANDERMONDE1D(:,J) = JACOBIP(X, 0.0_WP, 0.0_WP, J-1)
+      DO J=1,N+1
+        VANDERMONDE1D(:,J) = JACOBIP(X, 0.0_WP, 0.0_WP, J-1)
+      END DO
+!      DO J = 1, N+1
+!        PRINT*,'N = ', J
+!        PRINT*,VANDERMONDE1D(J,:)
+!        PRINT*
+!      END DO
+
+      RETURN
+   END FUNCTION VANDERMONDE1D    
+   
+   
+    FUNCTION JACOBIP(X, ALPHA, BETA, N)
+      REAL(WP), DIMENSION(:), INTENT(IN) :: X
+      REAL(WP), INTENT(IN) :: ALPHA, BETA
+      INTEGER(IP), INTENT(IN) :: N
+      REAL(WP), DIMENSION(SIZE(X)) :: JACOBIP
+
+      REAL(WP), DIMENSION(N+1,SIZE(X)) :: PL
+      REAL(WP) :: LNGAMMAAB, LNGAMMAA, LNGAMMAB, INVSQGAMMA0, GAMMA0, GAMMA1
+      REAL(WP) :: FAC1, FAC2
+      REAL(WP) :: AOLD, ANEW, BNEW, H1, IREAL, IREALP1
+      INTEGER(IP) :: I
+
+      PL = 0.0_WP
+
+      LNGAMMAAB = LOG_GAMMA(ALPHA+BETA+1.0_WP)
+      LNGAMMAA  = LOG_GAMMA(ALPHA+1.0_WP)
+      LNGAMMAB  = LOG_GAMMA(BETA+1.0_WP)
+
+      INVSQGAMMA0 = 2.0_WP**(ALPHA+BETA+1.0_WP)/(ALPHA+BETA+1.0_WP)* &
+                             EXP(LNGAMMAA+LNGAMMAB-LNGAMMAAB)
+      GAMMA0 = 1.0_WP/SQRT(INVSQGAMMA0)
+
+      PL(1,:) = GAMMA0
+
+      IF (N==0) THEN
+        JACOBIP(:) = PL(1,:)
+        RETURN
+      END IF
+
+      GAMMA1 = 0.5_WP*SQRT((ALPHA+BETA+3.0_WP) &
+                           /((ALPHA+1.0_WP)*(BETA+1.0_WP)))*GAMMA0
+      FAC1 = (ALPHA+BETA+2.0_WP)
+      FAC2 = (ALPHA-BETA)
+      PL(2,:) = GAMMA1 * ( FAC1*X(:) + FAC2 )
+
+      IF (N==1) THEN
+        JACOBIP(:) = PL(2,:)
+        RETURN
+      END IF
+
+      AOLD = 2.0_WP / (2.0_WP+ALPHA+BETA) * &
+             SQRT ( (1.0_WP+ALPHA)*(1.0_WP+BETA) / (3.0_WP+ALPHA+BETA) )
+
+      DO I = 1, N-1
+        IREAL = REAL(I,WP)
+        IREALP1 = IREAL+1.0_WP
+        H1 = 2.0_WP*IREAL+ALPHA+BETA
+        ANEW = 2.0_WP/(H1+2.0_WP)* &
+               SQRT( IREALP1*(IREALP1+ALPHA+BETA) * &
+                     (IREALP1+ALPHA) * (IREALP1+BETA) / &
+                     (H1+1.0_WP)/(H1+3.0_WP) )
+        BNEW = - (ALPHA**2-BETA**2) / (H1*(H1+2.0_WP) )
+        PL(I+2,:) = 1.0_WP / ANEW * ( -AOLD*PL(I,:) + (X(:)-BNEW)*PL(I+1,:) )
+        AOLD = ANEW
+      END DO
+      JACOBIP(:) = PL(N+1,:)
+      RETURN
+    END FUNCTION JACOBIP   
+    FUNCTION GRADJACOBIP ( X, ALPHA, BETA, N )
+      REAL(WP), DIMENSION(:), INTENT(IN) :: X
+      REAL(WP), INTENT(IN) :: ALPHA, BETA
+      INTEGER(IP), INTENT(IN) :: N
+      REAL(WP), DIMENSION(SIZE(X)) :: GRADJACOBIP
+
+      IF (N==0) THEN
+        GRADJACOBIP = 0.0_WP
+        RETURN
+      END IF
+      GRADJACOBIP = SQRT(N*(N+ALPHA+BETA+1))* &
+                      JACOBIP(X,ALPHA+1.0_WP,BETA+1.0_WP,N-1)
+      RETURN
+    END FUNCTION GRADJACOBIP  
+    
+
+   FUNCTION GRADVANDERMONDE1D ( N, X )
+      INTEGER(IP), INTENT(IN) :: N
+      REAL(WP), DIMENSION(:), INTENT(IN) :: X
+      REAL(WP), DIMENSION(SIZE(X),N+1) :: GRADVANDERMONDE1D
+
+      INTEGER :: J
+
+!      FORALL(J=0:N) GRADVANDERMONDE1D(:,J+1) = GRADJACOBIP(X, 0.0_WP, 0.0_WP, J)
+      DO J=0,N
+        GRADVANDERMONDE1D(:,J+1) = GRADJACOBIP(X, 0.0_WP, 0.0_WP, J)
+      END DO
+
+      RETURN
+    END FUNCTION GRADVANDERMONDE1D    
+    
+    FUNCTION DMATRIX1D ( N, X, V )
+      INTEGER(IP), INTENT(IN) :: N
+      REAL(WP), DIMENSION(N+1), INTENT(IN) :: X
+      REAL(WP), DIMENSION(N+1,N+1), INTENT(IN) :: V
+      REAL(WP), DIMENSION(N+1,N+1) :: DMATRIX1D
+
+      REAL(WP), DIMENSION(N+1,N+1) :: VR, VRT, VT, DRT
+      INTEGER(IP), DIMENSION(N+1) :: IPIV
+      INTEGER(IP) :: I, J, INFO
+
+      VT = TRANSPOSE(V)
+      VR = GRADVANDERMONDE1D ( N, X )
+      VRT = TRANSPOSE(VR)
+
+      IF ( WP == DP ) THEN
+        CALL DGESV ( N+1, N+1, VT, N+1, IPIV, VRT, N+1, INFO )
+      ELSE IF ( WP == QP ) THEN
+        !CALL QGESV ( N+1, N+1, VT, N+1, IPIV, VRT, N+1, INFO )
+      ENDIF
+
+      IF (INFO <0) THEN
+        PRINT*,'PARAMETER ', I, ' IN CALL TO DGESV HAS ILLEGAL VALUE'
+        STOP
+      END IF
+      IF (INFO >0) THEN
+        PRINT*, 'MATRIX IN CALL TO DGESV IS SINGULAR'
+        STOP
+      END IF
+
+      DMATRIX1D = TRANSPOSE(VRT)
+    END FUNCTION DMATRIX1D    
+    
+   SUBROUTINE INVERSEMAT(M,  A, INVA)
+        IMPLICIT NONE
+        INTEGER, INTENT(IN) :: M
+        REAL(WP), DIMENSION(M, M), INTENT(IN)   :: A
+        REAL(WP), DIMENSION(M, M), INTENT(OUT)  :: INVA
+        
+
+        REAL(WP), DIMENSION(:), ALLOCATABLE     :: IPIV
+        REAL(WP), DIMENSION(:), ALLOCATABLE     :: WORK
+        INTEGER(IP)                                 :: INFO
+        
+
+        
+
+
+            ALLOCATE(IPIV(M))
+            ALLOCATE(WORK(M))
+            INVA(:,:) = A
+            CALL DGETRF(M, M, INVA, M, IPIV, INFO)
+            
+            CALL DGETRI(M,INVA,M,IPIV,WORK, M, INFO)
+            
+            DEALLOCATE(IPIV, WORK)
+   
+   END SUBROUTINE INVERSEMAT
+        
+
+    SUBROUTINE JACOBIAN ( N, VX, R, DR, X, RX )
+      INTEGER(IP), INTENT(IN) :: N
+      REAL(WP), DIMENSION(2), INTENT(IN) :: VX
+      REAL(WP), DIMENSION(N+1), INTENT(IN) :: R
+      REAL(WP), DIMENSION(:,:), INTENT(IN) :: DR
+      REAL(WP), DIMENSION(N+1), INTENT(OUT) :: X
+      REAL(WP), DIMENSION(N+1), INTENT(OUT) :: RX
+      REAL(WP), DIMENSION(N+1) :: XR
+      INTEGER(IP) :: I,J
+      
+      DO I = 1, N+1
+        X(I) = VX(1)+0.5_WP*(1.0_WP+R(I))*(VX(2)-VX(1))
+      END DO
+      XR = 0.0_WP
+      DO I = 1, N+1
+        DO J = 1, N+1
+          XR(I) = XR(I) + DR(I,J) * X(J)
+        END DO
+      END DO
+      RX = 1.0_WP / XR
+    END SUBROUTINE JACOBIAN   
+END MODULE MODULE_MATHUTILITY
