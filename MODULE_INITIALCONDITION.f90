@@ -1,0 +1,55 @@
+MODULE MODULE_INITIALCONDITION
+    USE MODULE_PRECISION
+    USE MODULE_ELEMENT
+    CONTAINS
+    
+    SUBROUTINE INITIAL_EULER_1D(FIRST, LAST, ELE)
+    IMPLICIT NONE
+    INTEGER(IP), INTENT(IN) :: FIRST, LAST
+    TYPE(ELEMENT), DIMENSION(:), INTENT(INOUT), POINTER  :: ELE
+    INTEGER(IP) :: I
+    REAL(WP), DIMENSION(:,:), POINTER   :: CONSERVATIVE, PRIMATIVE
+    TYPE(ELEMENT), DIMENSION(:), POINTER    :: ELE_PTR
+    INTEGER(IP) :: I_ORDER
+    INTEGER(IP) :: N1, NVAL
+    
+    DO I = FIRST, LAST, 1
+        N1 = ELE(I)%ORDER 
+        DO I_ORDER = 1, N1+1
+            IF (ELE(I)%XK(I_ORDER) <= 0.5_WP) THEN 
+                
+                ELE(I)%CONSERVATIVE(I_ORDER, 1)     = 1._WP
+                ELE(I)%CONSERVATIVE(I_ORDER, 2)     = 0._WP
+                ELE(I)%PRIMATIVE(I_ORDER, 1)        = 1._WP
+                ELE(I)%CONSERVATIVE(I_ORDER, 3)     = 0.5_WP*ELE(I)%CONSERVATIVE(I_ORDER, 2)**2._WP/ELE(I)%CONSERVATIVE(I_ORDER, 1)&
+                                                    + ELE(I)%PRIMATIVE(I_ORDER, 1)/(ELE(I)%MATERIALINFO(1)%GAMMA - 1._WP)
+                ELE(I)%PRIMATIVE(I_ORDER, 2)        = 0._WP
+                ELE(I)%PRIMATIVE(I_ORDER, 3)        = ELE(I)%PRIMATIVE(I_ORDER, 1)/ELE(I)%MATERIALINFO(1)%R_GAS_CONSTANT/ELE(I)%CONSERVATIVE(I_ORDER,1)
+
+            ELSE
+               ELE(I)%CONSERVATIVE(I_ORDER, 1)      = 0.125_WP
+               
+                ELE(I)%CONSERVATIVE(I_ORDER, 2)     = 0._WP
+                ELE(I)%PRIMATIVE(I_ORDER, 1)        = 0.1_WP
+                ELE(I)%CONSERVATIVE(I_ORDER, 3)     = 0.5_WP*ELE(I)%CONSERVATIVE(I_ORDER, 2)*ELE(I)%CONSERVATIVE(I_ORDER, 2)/ELE(I)%CONSERVATIVE(I_ORDER, 1)&
+                                                    +ELE(I)%PRIMATIVE(I_ORDER, 1)/(ELE(I)%MATERIALINFO(1)%GAMMA - 1._WP)
+                ELE(I)%PRIMATIVE(I_ORDER, 2)        = 0._WP
+                ELE(I)%PRIMATIVE(I_ORDER, 3)        = ELE(I)%PRIMATIVE(I_ORDER, 1)/ELE(I)%MATERIALINFO(1)%R_GAS_CONSTANT/ELE(I)%CONSERVATIVE(I_ORDER,1)
+        
+            END IF
+            
+        
+        END DO
+        CALL ELE(I)%CONS2PRIM()
+        !PRINT*, ELE(I)%CONSERVATIVE(:,3)
+        CONTINUE
+    END DO
+    
+    
+    
+    END SUBROUTINE INITIAL_EULER_1D
+    
+    
+END MODULE MODULE_INITIALCONDITION
+    
+    
